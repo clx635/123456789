@@ -141,7 +141,13 @@ jobs:
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
           echo "ANDROID_HOME=${ANDROID_HOME:-}"
 
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK_DIR" ]; then
+            echo "ANDROID_SDK_ROOT/ANDROID_HOME not set"
+            exit 127
+          fi
+          echo "sdk.dir=$SDK_DIR" > local.properties
+          echo "sdk.dir resolved to: $SDK_DIR"
 
           GRADLE_CMD=""
           if [ -f "./gradlew" ] && [ -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
@@ -170,7 +176,11 @@ jobs:
           set -e
           if [ "$BUILD_EXIT" -ne 0 ]; then
             echo "== Build failed, error lines (tail) =="
-            grep -nE "FAILURE: Build failed|\\* What went wrong:|Caused by:|Execution failed for task|^> Task |^e: |: error: " build.log | tail -n 250 || true
+            grep -nE "FAILURE: Build failed|\\* What went wrong:|Caused by:|Execution failed for task|^> Task |^e: |: error: " build.log | tail -n 400 || true
+            echo "== Kotlin compiler hints (tail) =="
+            grep -nE "(^e: )|(\\.kt: \\()|(\\.kt:\\()|(\\.kts: \\()|(\\.kts:\\()|Unresolved reference|Type mismatch|Overload resolution ambiguity|Conflicting overloads|Expecting an element" build.log | tail -n 400 || true
+            echo "== compileDebugKotlin context (tail) =="
+            grep -nE "^> Task :app:compileDebugKotlin|^> Task :app:compileReleaseKotlin|:compileDebugKotlin|:compileReleaseKotlin|CompilationErrorException" build.log | tail -n 200 || true
             echo "== Build failed, tail build.log =="
             tail -n 1200 build.log || true
             exit "$BUILD_EXIT"
@@ -189,4 +199,5 @@ jobs:
         with:
           name: build-logs
           path: ${{ env.PROJECT_DIR }}/build.log
+
 
