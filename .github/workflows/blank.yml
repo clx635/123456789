@@ -102,24 +102,37 @@ jobs:
 
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-          if [ -f "./gradlew" ]; then
+          GRADLE_CMD=""
+          if [ -f "./gradlew" ] && [ -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
             dos2unix ./gradlew || true
             chmod +x ./gradlew
-            ./gradlew --version
-            set +e
-            ./gradlew :app:assembleDebug --console=plain --stacktrace --info --no-daemon --no-parallel --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process 2>&1 | tee build.log
-            BUILD_EXIT=${PIPESTATUS[0]}
-            set -e
-            if [ "$BUILD_EXIT" -ne 0 ]; then
-              echo "== Build failed, error lines (tail) =="
-              grep -nE "FAILURE: Build failed|\\* What went wrong:|Caused by:|Execution failed for task|^> Task |^e: |: error: " build.log | tail -n 250 || true
-              echo "== Build failed, tail build.log =="
-              tail -n 600 build.log || true
-              exit "$BUILD_EXIT"
-            fi
+            GRADLE_CMD="./gradlew"
           else
-            echo "gradlew not found in PROJECT_DIR"
-            exit 4
+            echo "Gradle Wrapper JAR missing, using standalone Gradle distribution."
+            GRADLE_VERSION="$(sed -n 's/.*gradle-\\([0-9.]*\\)-bin\\.zip.*/\\1/p' ./gradle/wrapper/gradle-wrapper.properties | head -n 1)"
+            if [ -z "$GRADLE_VERSION" ]; then
+              GRADLE_VERSION="8.7"
+            fi
+            echo "Using Gradle $GRADLE_VERSION"
+            curl -sLo gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+            rm -rf "$RUNNER_TEMP/gradle"
+            mkdir -p "$RUNNER_TEMP/gradle"
+            unzip -q gradle.zip -d "$RUNNER_TEMP/gradle"
+            GRADLE_CMD="$RUNNER_TEMP/gradle/gradle-${GRADLE_VERSION}/bin/gradle"
+            chmod +x "$GRADLE_CMD" || true
+          fi
+
+          "$GRADLE_CMD" --version
+          set +e
+          "$GRADLE_CMD" :app:assembleDebug --console=plain --stacktrace --info --no-daemon --no-parallel --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process 2>&1 | tee build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "== Build failed, error lines (tail) =="
+            grep -nE "FAILURE: Build failed|\\* What went wrong:|Caused by:|Execution failed for task|^> Task |^e: |: error: " build.log | tail -n 250 || true
+            echo "== Build failed, tail build.log =="
+            tail -n 600 build.log || true
+            exit "$BUILD_EXIT"
           fi
 
       - name: Upload APK
@@ -135,5 +148,3 @@ jobs:
         with:
           name: build-logs
           path: ${{ env.PROJECT_DIR }}/build.log
-
-
