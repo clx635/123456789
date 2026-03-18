@@ -132,6 +132,7 @@ jobs:
           "$SDKMANAGER" "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest"
 
       - name: Build Debug APK
+        id: build
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -183,7 +184,13 @@ jobs:
             grep -nE "^> Task :app:compileDebugKotlin|^> Task :app:compileReleaseKotlin|:compileDebugKotlin|:compileReleaseKotlin|CompilationErrorException" build.log | tail -n 200 || true
             echo "== Build failed, tail build.log =="
             tail -n 1200 build.log || true
-            exit "$BUILD_EXIT"
+          fi
+          
+          echo "build_exit_code=$BUILD_EXIT" >> "$GITHUB_OUTPUT"
+          if [ "$BUILD_EXIT" -eq 0 ]; then
+            echo "build_status=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_status=failed" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload APK
@@ -192,6 +199,7 @@ jobs:
         with:
           name: debug-apk
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
 
       - name: Upload logs
         if: always()
@@ -199,5 +207,11 @@ jobs:
         with:
           name: build-logs
           path: ${{ env.PROJECT_DIR }}/build.log
+          if-no-files-found: warn
 
-
+      - name: Build result
+        if: always()
+        shell: bash
+        run: |
+          echo "build_status=${{ steps.build.outputs.build_status || 'unknown' }}"
+          echo "build_exit_code=${{ steps.build.outputs.build_exit_code || 'unknown' }}"
